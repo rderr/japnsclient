@@ -1,9 +1,11 @@
 package com.weatherflow.japns.client;
 
 import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.util.Map;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
@@ -89,20 +91,22 @@ public class japnsClient {
 		if (feedbackService) {
 			japnsClient.printFailedDevices(keyFile, password, sandbox);
 		} else {
-		
-			BufferedReader stdin = new BufferedReader(new InputStreamReader(System.in));
-			if (notificationFile != null) {
-				try {
-					stdin = new BufferedReader(new java.io.FileReader(notificationFile));
-				}
-				catch(FileNotFoundException e) {
-					System.out.println("Could not open data file");
-					return;
-				}
-			} else {
-				stdin = new BufferedReader(new InputStreamReader(System.in));
+			BufferedReader stdin;
+			
+			try {
+				if (notificationFile != null)
+					stdin = new BufferedReader(new InputStreamReader(new FileInputStream(notificationFile), "UTF-8"));
+				else
+					stdin = new BufferedReader(new InputStreamReader(System.in, "UTF-8"));
 			}
-	
+			catch(FileNotFoundException e) {
+				System.out.println("Could not open data file");
+				return;
+			}
+			catch (UnsupportedEncodingException e) {
+				throw new RuntimeException(e);
+			}
+			
 			try {
 				NotificationService ns = new NotificationService(keyFile, password, sandbox);
 	
