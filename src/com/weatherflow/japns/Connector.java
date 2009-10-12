@@ -24,7 +24,7 @@ import javax.net.ssl.SSLSocketFactory;
  *
  */
 public class Connector {
-	public static final String APNS_HOST = "gateway.sandbox.push.apple.com:2195";
+	public static final String APNS_HOST = "gateway.push.apple.com:2195";
 	public static final String FEEDBACK_HOST = "feedback.push.apple.com:2196";
 
 	public static final String DEV_APNS_HOST = "gateway.sandbox.push.apple.com:2195";
@@ -78,6 +78,7 @@ public class Connector {
 		
 		if (this.apnsSocket == null || this.apnsSocket.isConnected() == false) {
 			try  {
+
 				// Attempt to load the key/cert file
 				KeyStore ks = KeyStore.getInstance("PKCS12");
 				ks.load(this.keyFile, this.keyPasswd);
