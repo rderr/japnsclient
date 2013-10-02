@@ -1,7 +1,10 @@
 package com.weatherflow.japns;
 
-import java.util.Vector;
 import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
+import org.apache.log4j.Logger;
 import org.json.simple.JSONValue;
 
 /**
@@ -12,10 +15,19 @@ import org.json.simple.JSONValue;
  *
  */
 public class Notification {
+	private static final Logger log = Logger.getLogger("com.weatherflow.japnsClient.Notification");
+	
 	public static final int MAX_NOTIFICATION_SIZE = 255;
+
+	private static final byte DEVICE_ITEM = 1;
+	private static final byte PAYLOAD_ITEM = 2;
+	private static final byte NOTIFICATION_ITEM = 3;
+	private static final byte EXPIRATION_ITEM = 4;
+	private static final byte PRIORITY_ITEM  = 5;
 	
 	private String deviceToken;
 	private Payload payload = null;
+	private Integer notificationId = null;
 	
 	/**
 	 * Constructs a Notification object
@@ -23,6 +35,7 @@ public class Notification {
 	 */
 	public Notification(String deviceToken) {
 		this.deviceToken = deviceToken.replace(" ", "");
+		log.debug("Device token: " + this.deviceToken);
 	}
 	
 	/**
@@ -71,6 +84,24 @@ public class Notification {
 		this.payload.put(key, payload);
 	}
 	
+	
+	
+	public Integer getNotificationId() {
+		return notificationId;
+	}
+
+	public void setNotificationId(Integer notificationId) {
+		this.notificationId = notificationId;
+	}
+	
+	public String getToken() {
+		return this.deviceToken;
+	}
+	
+	public void setToken(String deviceToken) {
+		this.deviceToken = deviceToken;
+	}
+
 	/**
 	 * Converts the payload to a JSON object
 	 */
@@ -83,47 +114,55 @@ public class Notification {
 	 * @return Byte array of Notification object
 	 */
 	public byte[] toByteArray() throws InvalidNotificationException {
-		Vector<Byte> messageArray = new Vector<Byte>();
-		byte[] output;
+		ByteBuffer message = ByteBuffer.allocate(1024);
+		message.order(ByteOrder.BIG_ENDIAN);
+		
+		log.debug("Marshalling notification");
 
-		// First byte of message is null
-		messageArray.add((byte)0);
-
-		// Token size is always 32 bytes
-		messageArray.add((byte)0);
-		messageArray.add((byte)32);
-		for (int i = 0; i < deviceToken.length(); i += 2) {
-			String t = deviceToken.substring(i, i + 2);
-			messageArray.add((byte)Integer.parseInt(t, 16));
-		}
-
-		// Get the payload string and convert it to byte[]
-		String payload = JSONValue.toJSONString(this.payload);
-
-		byte[] rawPayload;
+		log.debug("Adding notification identifier to frame: " + this.getNotificationId());
+		message.put(NOTIFICATION_ITEM);
+		message.putShort((short)4);
+		message.putInt(this.getNotificationId());
+		
+		// Payload
+		log.debug("Adding payload to frame: " + this.toString());
+		byte[] payload;
 		try {
-			rawPayload = payload.getBytes("UTF-8");
+			payload = this.toString().getBytes("UTF-8");
+			if (payload.length > MAX_NOTIFICATION_SIZE) {
+				throw new InvalidNotificationException(this, "Notification larger than 256 bytes");
+			}
 		} catch (UnsupportedEncodingException e) {
 			throw new RuntimeException(e);
 		}
-		
-		// Throw an exception if the payload is too large
-		if (rawPayload.length > Notification.MAX_NOTIFICATION_SIZE) {
-			throw new InvalidNotificationException(this, "Payload exceeds maximum size");
+		message.put(PAYLOAD_ITEM);
+		message.putShort((short)payload.length);
+		message.put(payload);
+
+		log.debug("Adding token to frame: " + deviceToken);
+		message.put(DEVICE_ITEM);
+		message.putShort((short)32);
+		for (int i = 0; i < deviceToken.length(); i+= 2) {
+			message.put((byte)Integer.parseInt(deviceToken.substring(i, i + 2), 16));
 		}
 
-		messageArray.add((byte)0);
-		messageArray.add((byte)rawPayload.length);
-		for (int i = 0; i < rawPayload.length; i++)
-			messageArray.add(rawPayload[i]);
-
-
-		// Convert from Byte collection to byte[]
-		output = new byte[messageArray.size()];
-		for (int i = 0; i < messageArray.size(); i++) {
-			output[i] = messageArray.get(i);
-		}
+		// TODO: Support expiration date 
+		log.debug("Adding expiration date to frame: " + deviceToken);
+		message.put(EXPIRATION_ITEM);
+		message.putShort((short)4);
+		message.putInt(0);
 		
-		return output;
+		// TODO: Support priority
+		log.debug("Adding priority to frame: " + deviceToken);
+		message.put(PRIORITY_ITEM);
+		message.putShort((short)1);
+		message.put((byte)10);
+		
+		message.flip();
+
+		byte[] outputBuffer = new byte[message.limit()];
+		message.get(outputBuffer);
+		
+		return outputBuffer;
 	}
 }

@@ -17,6 +17,8 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
+import org.apache.log4j.Logger;
+
 /**
  * ApnsConnector is an abstract class that handles connecting to Apple's push notification services (APNS)
  * 
@@ -24,6 +26,8 @@ import javax.net.ssl.SSLSocketFactory;
  *
  */
 public class Connector {
+	private static final Logger log = Logger.getLogger("com.weatherflow.japnsClient.notification");
+
 	public static final String APNS_HOST = "gateway.push.apple.com:2195";
 	public static final String FEEDBACK_HOST = "feedback.push.apple.com:2196";
 
@@ -36,6 +40,7 @@ public class Connector {
 	
 	private char[] keyPasswd;
 	private FileInputStream keyFile;
+	private SSLContext sslContext;
 
 	/**
 	 * Constructs a Connector object for connecting to APN services
@@ -48,6 +53,37 @@ public class Connector {
 		this.keyPasswd = keyPasswd.toCharArray();
 		this.keyFile = new FileInputStream(keyFilename);
 		this.host = host;
+
+		// Attempt to load the key/cert file
+		try {
+			log.debug("Getting keystore instance PKCS12");
+			KeyStore ks = KeyStore.getInstance("PKCS12");
+			log.debug("Loading keyfile");
+			ks.load(this.keyFile, this.keyPasswd);
+	
+			log.debug("Getting instance of KeyManagerFactory SunX509");
+			KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
+			keyManagerFactory.init(ks, this.keyPasswd);
+	
+			// Create the ssl connection using the provided key/cert
+			log.debug("Loading SSLContext");
+			sslContext = SSLContext.getInstance("TLS");
+			log.debug("Initalizing SSLContext");
+			sslContext.init(keyManagerFactory.getKeyManagers(), null, null);
+		} catch (KeyStoreException e) {
+			throw new RuntimeException(e);
+		} catch (NoSuchAlgorithmException e) {
+			throw new RuntimeException(e);
+		} catch (CertificateException e) {
+			throw new RuntimeException(e);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		} catch (UnrecoverableKeyException e) {
+			throw new RuntimeException(e);
+		} catch (KeyManagementException e) {
+			throw new RuntimeException(e);
+		}
+		
 	}
 	
 	/**
@@ -74,46 +110,34 @@ public class Connector {
 	 * Connects to APN service.  Uses existing connection if available.
 	 * @return OutputStream to APN service
 	 */
-	private SSLSocket connect() {
+	protected SSLSocket connect() {
+		log.debug("Connecting to APNS");
 		
 		if (this.apnsSocket == null || this.apnsSocket.isConnected() == false) {
+			log.debug("Opening new socket");
 			try  {
-
-				// Attempt to load the key/cert file
-				KeyStore ks = KeyStore.getInstance("PKCS12");
-				ks.load(this.keyFile, this.keyPasswd);
-				KeyManagerFactory tmf = KeyManagerFactory.getInstance("SunX509");
-				tmf.init(ks, keyPasswd);
-	
-				// Create the ssl connection using the provided key/cert
-				SSLContext sslContext = SSLContext.getInstance("TLS");
-				sslContext.init(tmf.getKeyManagers(), null, null);
-			
 				SSLSocketFactory factory = sslContext.getSocketFactory();
 	
 				String[] hostPort = this.host.split(":");
-				this.apnsSocket = (SSLSocket) factory.createSocket(hostPort[0], Integer.parseInt(hostPort[1]));
-				this.apnsSocket.setTcpNoDelay(true);
-
+				log.debug("Connecting to " + this.host);
+				apnsSocket = (SSLSocket) factory.createSocket(hostPort[0], Integer.parseInt(hostPort[1]));
+				apnsSocket.setTcpNoDelay(false);
+				
 				String[] suites = this.apnsSocket.getSupportedCipherSuites();
-				this.apnsSocket.setEnabledCipherSuites(suites);
+				apnsSocket.setEnabledCipherSuites(suites);
 				
+
 				//	Connect to service
-				this.apnsSocket.startHandshake();
+				log.debug("Starting handshake");
+				apnsSocket.startHandshake();
 				
-			} catch (KeyStoreException e) {
-				throw new RuntimeException("Cannot get instance of KeyStore type PKCS12", e);
-			} catch (CertificateException e) {
-				throw new RuntimeException("Problem loading certificate", e);
 			} catch (IOException e) {
-				throw new RuntimeException("Cannot read certificate file", e);
-			} catch (NoSuchAlgorithmException e) {
+				log.error("Exception while trying to connect to APNS: make sure you're running Java <=1.6");
+				e.printStackTrace();
 				throw new RuntimeException(e);
-			} catch (UnrecoverableKeyException e) {
-				throw new RuntimeException("Problem loading certificate", e);
-			} catch (KeyManagementException e) {
-				throw new RuntimeException("Problem loading certificate", e);
 			}
+		} else {
+			log.debug("Using existing connection");
 		}
 		
 		return this.apnsSocket;
@@ -125,6 +149,7 @@ public class Connector {
 	protected void close() {
 		if (apnsSocket != null) {
 			try {
+				log.debug("Closing socket");
 				apnsSocket.close();
 			} 
 			catch (IOException e) {

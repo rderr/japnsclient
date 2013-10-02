@@ -6,10 +6,21 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
-import com.weatherflow.japns.*;
+
+import com.weatherflow.japns.FailedDevice;
+import com.weatherflow.japns.FeedbackService;
+import com.weatherflow.japns.InvalidNotificationException;
+import com.weatherflow.japns.Notification;
+import com.weatherflow.japns.NotificationService;
+import com.weatherflow.japns.Payload;
 
 /**
  * <p>japnsClient is a command-line application that simplifies sending alerts to Apple's push notification server.  
@@ -28,6 +39,8 @@ import com.weatherflow.japns.*;
  *  -sandbox			Tells the japnsClient to connect to the sandbox server.<br>
  *  -notificationFile	Location of file containing notifications.  STDIN is used when notification file is not specified.<br>
  *  -feedbackService	Connects to feedback service and prints out list of invalid device tokens.  <br>
+ *  -verbose			Enables INFO level logging.  <br>
+ *  -debug				Enables DEBUG level logging.  <br>
  * <br>
  * Usage:<br>
  * 	java -jar japnsClient.jar -keyFile /path/to/kefile.p12 -password keyfilePassword -notificationFile /path/to/file/containing/notifications.txt<br>
@@ -45,7 +58,11 @@ import com.weatherflow.japns.*;
  *
  */
 public class japnsClient {
+	private static final Logger log = Logger.getLogger("com.weatherflow.japnsClient");
 
+	static {
+		//BasicConfigurator.configure();
+	}
 	/**
 	 * @param args
 	 */
@@ -57,27 +74,39 @@ public class japnsClient {
 		boolean sandbox = false;
 		boolean feedbackService = false;
 		
+		log.setLevel(Level.WARN);
 		
 		for(int i = 0; i < args.length - 1; i++) {
 			if (args[i].equalsIgnoreCase("-keyFile")) {
 				keyFile = args[i+1];
+				log.debug("Using keyfile: " + keyFile);
 			}
 			if (args[i].equalsIgnoreCase("-password")) {
 				password = args[i+1];
 			}
 			if (args[i].equalsIgnoreCase("-sandbox")) {
 				sandbox = true;
+				log.debug("Sandbox mode enabled");
 			}
 			if (args[i].equalsIgnoreCase("-notificationFile")) {
 				notificationFile = args[i+1];
+				log.debug("Notification file: " + notificationFile);
 			}
 			if (args[i].equalsIgnoreCase("-feedbackService")) {
 				feedbackService = true;
+				log.debug("Using feedback service");
+			}
+			if (args[i].equalsIgnoreCase("-verbose")) {
+				log.setLevel(Level.INFO);
+			}
+			if (args[i].equalsIgnoreCase("-debug")) {
+				log.setLevel(Level.DEBUG);
+				log.debug("Debug logging statements enabled");
 			}
 		}
 		
 		if (keyFile == null) {
-			System.out.println("Usage: japnsClient -keyFile KEYFILE -password KEYFILE_PASSWORD [-sandbox] [-notificationFile DATA_FILE] [-feedbackService]");
+			System.out.println("Usage: japnsClient -keyFile KEYFILE -password KEYFILE_PASSWORD [-sandbox] [-notificationFile DATA_FILE] [-feedbackService] [-verbose|-debug]");
 			System.out.println("");
 			System.out.println("DATA_FILE is a pipe delimited file containing the device token and json payload");
 			System.out.println("Example:");
@@ -94,44 +123,51 @@ public class japnsClient {
 			BufferedReader stdin;
 			
 			try {
-				if (notificationFile != null)
+				if (notificationFile != null) {
 					stdin = new BufferedReader(new InputStreamReader(new FileInputStream(notificationFile), "UTF-8"));
-				else
+					log.debug("Reading alerts from notificationFile: " + notificationFile);
+				} else {
 					stdin = new BufferedReader(new InputStreamReader(System.in, "UTF-8"));
-			}
-			catch(FileNotFoundException e) {
-				System.out.println("Could not open data file");
+					log.debug("Reading alerts from STDIN");
+				}
+			} catch(FileNotFoundException e) {
+				log.error("Could not open notification file: " + notificationFile);
 				return;
-			}
-			catch (UnsupportedEncodingException e) {
+			} catch (UnsupportedEncodingException e) {
+				log.error("Unsupported encoding in notification file.  Make sure file is in UTF-8.");
 				throw new RuntimeException(e);
 			}
 			
 			try {
 				NotificationService ns = new NotificationService(keyFile, password, sandbox);
+				List<Notification> notifications = new ArrayList<Notification>();
 	
 				while (stdin.ready()) {
 					String message = stdin.readLine();
+					log.debug("Message read: " + message);
 	
 					String[] parts = message.split("\\|");
 					
 					String token = parts[0];
 					String payload = parts[1];
 					
+					log.debug("Token: " + token);
+					log.debug("Payload: " + payload);
+					
+					log.debug("Parsing payload");
 					JSONObject json = (JSONObject)JSONValue.parse(payload);
 					
 					Payload p = new Payload();
 					p.putAll((Map<String, Object>)json);
-					
-					Notification n = new Notification(token, p);
-	
-					ns.send(n);
+					notifications.add(new Notification(token, p));
 				}
-			}
-			catch (InvalidNotificationException e) {
+
+				log.debug("Sending notifications");
+				ns.sendNotifications(notifications);
+			} catch (InvalidNotificationException e) {
+				log.error("Invalid notification");
 				throw new RuntimeException(e);
-			}
-			catch (IOException e) {
+			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
 		}
@@ -153,8 +189,7 @@ public class japnsClient {
 			}
 			
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			throw new RuntimeException(e);
 		}
 	}
 }

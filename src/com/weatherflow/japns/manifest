@@ -1,2 +1,7 @@
 Manifest-Version: 1.0
+Built-By: Rob
+Build-Jdk: 1.6.0_35
+Created-By: Apache Maven
+Main-Class: com.weatherflow.japns.client.japnsClient
+Archiver-Version: Plexus Archiver
 
