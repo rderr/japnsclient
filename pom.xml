@@ -43,6 +43,7 @@
                   <manifestEntries>
                     <Main-Class>com.weatherflow.japns.client.japnsClient</Main-Class>
                     <Build-Number>1</Build-Number>
+                    <Class-Path>main/resources</Class-Path>
                   </manifestEntries>
                 </transformer>
               </transformers>

@@ -10,8 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.log4j.BasicConfigurator;
+import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.apache.log4j.PropertyConfigurator;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
 
@@ -60,9 +63,6 @@ import com.weatherflow.japns.Payload;
 public class japnsClient {
 	private static final Logger log = Logger.getLogger("com.weatherflow.japnsClient");
 
-	static {
-		//BasicConfigurator.configure();
-	}
 	/**
 	 * @param args
 	 */
@@ -74,22 +74,22 @@ public class japnsClient {
 		boolean sandbox = false;
 		boolean feedbackService = false;
 		
-		log.setLevel(Level.WARN);
+		PropertyConfigurator.configure(log.getClass().getClassLoader().getResource("main/resources/log4j.properties"));
 		
-		for(int i = 0; i < args.length - 1; i++) {
+		for(int i = 0; i < args.length; i++) {
 			if (args[i].equalsIgnoreCase("-keyFile")) {
-				keyFile = args[i+1];
+				keyFile = args[++i];
 				log.debug("Using keyfile: " + keyFile);
 			}
 			if (args[i].equalsIgnoreCase("-password")) {
-				password = args[i+1];
+				password = args[++i];
 			}
 			if (args[i].equalsIgnoreCase("-sandbox")) {
 				sandbox = true;
 				log.debug("Sandbox mode enabled");
 			}
 			if (args[i].equalsIgnoreCase("-notificationFile")) {
-				notificationFile = args[i+1];
+				notificationFile = args[++i];
 				log.debug("Notification file: " + notificationFile);
 			}
 			if (args[i].equalsIgnoreCase("-feedbackService")) {
@@ -97,10 +97,10 @@ public class japnsClient {
 				log.debug("Using feedback service");
 			}
 			if (args[i].equalsIgnoreCase("-verbose")) {
-				log.setLevel(Level.INFO);
+				Logger.getRootLogger().setLevel(Level.INFO);
 			}
 			if (args[i].equalsIgnoreCase("-debug")) {
-				log.setLevel(Level.DEBUG);
+				Logger.getRootLogger().setLevel(Level.DEBUG);
 				log.debug("Debug logging statements enabled");
 			}
 		}
